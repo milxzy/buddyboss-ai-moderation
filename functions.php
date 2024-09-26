@@ -150,7 +150,7 @@ add_action( 'bp_setup_integrations', 'MILXPLUGIN_register_integration' );
 // have function take in the content/reply
 function init_gemini($content) {
     try {
-        $yourApiKey = 'AIzaSyAEJs6OTfPhp1be3l-pCIsV9RlMBS499LA';
+        $apiKey = 'AIzaSyAEJs6OTfPhp1be3l-pCIsV9RlMBS499LA';
         
         // Check if the class exists
         if (!class_exists('Gemini')) {
@@ -158,7 +158,7 @@ function init_gemini($content) {
         }
 
         // Set client variable to be Gemini
-        $client = Gemini::client($yourApiKey);
+        $client = Gemini::client($apiKey);
         
         // Check if the methods exist
         if (!method_exists($client->geminiPro(), 'generateContent')) {
@@ -200,15 +200,6 @@ function init_gemini($content) {
 }
 
 
-// Hook the function to wp_loaded
-// add_action('wp_loaded', 'init_gemini');
-
-// Gemini API works now
-// whenever a buddyboss comment is posted, run a function before submission
-// check gemini for content appropriateness
-// if gemini approves, post
-// if gemini does not approve, have a modal appear that says the comment was inapropriate
-
 
 // step 1, have a function called when a comment is uploaded
 
@@ -224,9 +215,19 @@ function my_custom_function_on_reply($reply_id) {
     if (is_numeric($reply_id)) {
       // Get the reply and log it to the debug log
         $reply_content = strip_tags(bbp_get_reply_content($reply_id));
+	$topic_id = bbp_get_reply_topic_id($reply_id);
 
         error_log("A new forum reply has been posted. Reply ID: " . $reply_id);
         error_log("Reply Content: " . $reply_content);
+
+	 $replies = bbp_get_replies(array('post_parent' => $topic_id));
+	$full_thread_content = '';
+
+	foreach ($replies as $reply){
+		$full_thread_content .= strip_tags(bbp_get_reply_content($reply->ID)) . "\n";
+	}
+
+
 		try{
       // Run content through gemini, if gemini returns !Yes, alert user that content must be appropriate
 			$result = init_gemini($reply_content);
@@ -234,7 +235,8 @@ function my_custom_function_on_reply($reply_id) {
 			//flag reply and send it to moderators?
 			flag_inappropriate_post($reply_id);
         //wp_delete_post($reply_id, true);
-				wp_die('Your content must be appropriate');
+				// impliment modal here
+				wp_die('Your content is not appropriate and must be approved by a moderator');
 			}
 			
     } catch(Exception $e){
@@ -274,7 +276,7 @@ function flag_inappropriate_post($reply_id) {
         'post_status' => 'pending', // Set the status to 'pending'
     );
     wp_update_post($reply_data);
-	error_log('flagged');
+	error_log('flagged ' . $reply_id);
 }
 
 function filter_flagged_comments($query) {
@@ -336,10 +338,10 @@ function my_flagged_replies_page() {
                     foreach ($flagged_replies as $reply) {
                         echo '<tr>';
                         echo '<td>' . esc_html($reply->ID) . '</td>';
-                        echo '<td>' . esc_html($reply->post_content) . '</td>';
+                        echo '<td>' . esc_html(strip_tags($reply->post_content)) . '</td>';
                         echo '<td>';
-                        echo '<a href="' . admin_url('admin.php?action=approve_flagged_reply&reply_id=' . $reply->ID) . '">' . __('Approve', 'textdomain') . '</a> | ';
-                        echo '<a href="' . admin_url('admin.php?action=disapprove_flagged_reply&reply_id=' . $reply->ID) . '">' . __('Disapprove', 'textdomain') . '</a>';
+                        echo ' <a href="' . esc_url(admin_url('admin.php?action=approve_flagged_reply&reply_id=' . $reply->ID)) . '">' . __('Approve', 'textdomain') . '</a> | ';
+                        echo '<a href="' . esc_url(admin_url('admin.php?action=disapprove_flagged_reply&reply_id=' . $reply->ID)) . '">' . __('Disapprove', 'textdomain') . '</a>';
                         echo '</td>';
                         echo '</tr>';
                     }
@@ -371,15 +373,20 @@ function disapprove_flagged_reply($reply_id) {
 
 // Handle the disapprove action
 function handle_disapprove_flagged_reply() {
-    if (isset($_GET['reply_id']) && is_numeric($_GET['reply_id'])) {
-        $reply_id = intval($_GET['reply_id']);
-        disapprove_flagged_reply($reply_id);
+    // Check if the action is set and correct
+    if (isset($_GET['action']) && $_GET['action'] === 'disapprove_flagged_reply') {
+        if (isset($_GET['reply_id']) && is_numeric($_GET['reply_id'])) {
+            $reply_id = intval($_GET['reply_id']);
+            disapprove_flagged_reply($reply_id);
+            error_log('Disapproved reply ID: ' . $reply_id);
 
-        // Redirect back to the flagged replies page
-        wp_redirect(admin_url('admin.php?page=flagged-replies'));
-        exit;
-    } else {
-        error_log('Invalid or missing reply_id parameter for disapproval.');
+            // Redirect after disapproval
+            wp_redirect(admin_url('admin.php?page=flagged-replies'));
+            exit;
+        } else {
+            error_log('Invalid or missing reply_id parameter for disapproval.');
+            error_log('GET parameters: ' . print_r($_GET, true));
+        }
     }
 }
 add_action('admin_init', 'handle_disapprove_flagged_reply');
@@ -411,18 +418,23 @@ function approve_flagged_reply($reply_id) {
 
 // Handle the approve action
 function handle_approve_flagged_reply() {
+    error_log('Full URL: ' . $_SERVER['REQUEST_URI']);
+
     if (isset($_GET['reply_id']) && is_numeric($_GET['reply_id'])) {
         $reply_id = intval($_GET['reply_id']);
         approve_flagged_reply($reply_id);
+        error_log('Approved reply ID: ' . $reply_id);
 
-        // Redirect back to the flagged replies page
+        // Redirect after approval
         wp_redirect(admin_url('admin.php?page=flagged-replies'));
         exit;
     } else {
         error_log('Invalid or missing reply_id parameter for approval.');
+        error_log('GET parameters: ' . print_r($_GET, true));
     }
 }
 add_action('admin_init', 'handle_approve_flagged_reply');
+
 
 
 
