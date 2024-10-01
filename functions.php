@@ -215,19 +215,14 @@ function my_custom_function_on_reply($reply_id) {
     if (is_numeric($reply_id)) {
       // Get the reply and log it to the debug log
         $reply_content = strip_tags(bbp_get_reply_content($reply_id));
-	$topic_id = bbp_get_reply_topic_id($reply_id);
-
+			
         error_log("A new forum reply has been posted. Reply ID: " . $reply_id);
         error_log("Reply Content: " . $reply_content);
-
-	 $replies = bbp_get_replies(array('post_parent' => $topic_id));
-	$full_thread_content = '';
-
-	foreach ($replies as $reply){
-		$full_thread_content .= strip_tags(bbp_get_reply_content($reply->ID)) . "\n";
-	}
-
-
+	// TODO
+	// if getting full context of thread, loop through a function that gets all replies from a certain user, store in an object, and do that for all users in forum.
+	// if summarizing, get all replies into an object, and pass it through gemini
+	// bbp_get_user_replies_created will get the replies to a forum that a certain user created, I could do this for every user in the forum.
+	// 
 		try{
       // Run content through gemini, if gemini returns !Yes, alert user that content must be appropriate
 			$result = init_gemini($reply_content);
@@ -252,21 +247,20 @@ function my_custom_function_on_reply($reply_id) {
 			error_log('Gemini API Error: ' . $e->getMessage());
 		};
 
-        if (stripos($reply_content, 'Minecraft') !== false) {
-            error_log("Reply validation failed (ID: " . $reply_id . "): The reply must not contain the word 'Minecraft'.");
-
-            // Check for permission to delete
-            if (!current_user_can('delete_reply', $reply_id)) {
-                error_log("Current user does not have permission to delete reply with ID: " . $reply_id);
-                return;
-            }
-
-            // Attempt to delete the reply
-        }
     } else {
         error_log("Unexpected data type for reply ID: " . var_export($reply_id, true));
     }
 }
+
+
+// Function for summarizing below
+function summarize_thread(){
+	//get user ids of all members in thread
+	//place them in an array
+	//loop through that array running each username through the bbp_get_user_replies method
+	//each loop iteration, add the result to an object
+	//give object to gemini
+	}
 
 
 function flag_inappropriate_post($reply_id) {
@@ -434,12 +428,6 @@ function handle_approve_flagged_reply() {
     }
 }
 add_action('admin_init', 'handle_approve_flagged_reply');
-
-
-
-
-
-
 
 
 
